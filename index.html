@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VaultAuth — WebAuthn Demo</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      background: #080d14;
+      color: #e2e8f0;
+      font-family: 'Inter', system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0 16px 60px;
+    }
+
+    @keyframes fp-pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.55; transform: scale(0.94); }
+    }
+
+    /* ── Header ── */
+    .header { text-align: center; margin-top: 44px; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: #0f172a; border: 1px solid #1e293b;
+      border-radius: 999px; padding: 5px 16px;
+      font-size: 12px; color: #6EE7B7; font-family: monospace;
+      margin-bottom: 18px;
+    }
+    .badge-dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; }
+    h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+    .subtitle { color: #64748b; font-size: 14px; margin-top: 6px; }
+
+    /* ── Card ── */
+    .card {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 16px;
+      padding: 32px 28px;
+      width: 100%; max-width: 420px;
+      margin-top: 28px;
+    }
+
+    /* ── Fingerprint SVG ── */
+    .fp-wrap { text-align: center; margin-bottom: 22px; }
+    .fp-wrap svg { display: block; margin: 0 auto; }
+    .fp-pulse { animation: fp-pulse 1.5s ease-in-out infinite; }
+
+    /* ── Card headings ── */
+    .card-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+    .card-sub   { color: #64748b; font-size: 13px; margin-bottom: 20px; }
+
+    /* ── Input ── */
+    label.field { display: block; font-size: 13px; color: #94a3b8; }
+    input[type="text"] {
+      display: block; width: 100%;
+      background: #0a1120; border: 1px solid #1e3a5f;
+      border-radius: 8px; color: #e2e8f0;
+      font-size: 15px; font-family: monospace;
+      padding: 11px 14px; outline: none;
+      margin-top: 8px; transition: border-color .15s;
+    }
+    input[type="text"]:focus { border-color: #0d9488; }
+
+    /* ── Buttons ── */
+    .btn-primary {
+      display: block; width: 100%;
+      background: linear-gradient(135deg, #059669, #0d9488);
+      border: none; border-radius: 10px;
+      color: #fff; font-size: 15px; font-weight: 600;
+      padding: 13px 0; cursor: pointer;
+      margin-top: 16px; letter-spacing: 0.3px;
+      transition: opacity .15s;
+    }
+    .btn-ghost {
+      display: block; width: 100%;
+      background: transparent; border: 1px solid #1e293b;
+      border-radius: 10px; color: #94a3b8;
+      font-size: 14px; padding: 10px 0;
+      cursor: pointer; margin-top: 10px;
+      transition: opacity .15s;
+    }
+    .btn-primary:hover, .btn-ghost:hover { opacity: 0.82; }
+
+    /* ── Status badges ── */
+    .status {
+      border-radius: 8px; padding: 10px 14px;
+      font-size: 13px; font-family: monospace;
+      margin-top: 12px; line-height: 1.5;
+    }
+    .status.success { background:#052e16; border:1px solid #16a34a; color:#4ade80; }
+    .status.error   { background:#2d0a0a; border:1px solid #dc2626; color:#f87171; }
+    .status.info    { background:#0c1a2e; border:1px solid #3b82f6; color:#93c5fd; }
+    .status.warn    { background:#1c1207; border:1px solid #d97706; color:#fbbf24; }
+
+    /* ── Success session box ── */
+    .session-box {
+      background: #0a1120; border: 1px solid #1e293b;
+      border-radius: 10px; padding: 16px;
+      font-size: 13px; color: #94a3b8; font-family: monospace;
+      margin-top: 20px;
+    }
+    .session-box .comment { color: #475569; margin-bottom: 6px; }
+    .session-box .green  { color: #6EE7B7; }
+    .session-box .lime   { color: #4ade80; }
+    .session-box .yellow { color: #fbbf24; }
+
+    /* ── Log panel ── */
+    .log-panel { margin-top: 16px; }
+    .log-label {
+      font-size: 11px; color: #475569;
+      font-family: monospace; letter-spacing: 1px; margin-bottom: 8px;
+    }
+    .log-scroll { max-height: 160px; overflow-y: auto; }
+    .log-line   { font-family: monospace; font-size: 12px; margin-bottom: 4px; }
+    .log-time   { color: #475569; margin-right: 8px; }
+    .log-ok   { color: #4ade80; }
+    .log-err  { color: #f87171; }
+    .log-info { color: #93c5fd; }
+    .log-warn { color: #fbbf24; }
+
+    /* ── Footer ── */
+    .footer {
+      color: #334155; font-size: 11px; font-family: monospace;
+      margin-top: 20px; text-align: center; max-width: 380px; line-height: 1.6;
+    }
+
+    /* ── Views ── */
+    .view { display: none; }
+    .view.active { display: block; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="badge"><span class="badge-dot"></span>WebAuthn / FIDO2</div>
+    <h1>VaultAuth</h1>
+    <p class="subtitle">Biometric authentication demo</p>
+  </div>
+
+  <!-- ── HOME ── -->
+  <div id="view-home" class="card view active">
+    <div class="fp-wrap">
+      <svg width="60" height="60" viewBox="0 0 64 64" fill="none">
+        <path d="M32 6C17.64 6 6 17.64 6 32"       stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M58 32C58 17.64 46.36 6 32 6"      stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M14 32c0-9.94 8.06-18 18-18"       stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M50 32c0-9.94-8.06-18-18-18"       stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M22 32c0-5.52 4.48-10 10-10s10 4.48 10 10" stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M32 22v10"                          stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M20 40c1.5 6 6.5 12 12 14"         stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M44 40c-1.5 6-6.5 12-12 14"        stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M12 38c.8 4 2.5 8 5 11"            stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M52 38c-.8 4-2.5 8-5 11"           stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+      <p style="color:#64748b;font-size:13px;margin-top:10px;">
+        Register your fingerprint once,<br>then sign in instantly.
+      </p>
+    </div>
+    <div id="home-status"></div>
+    <button class="btn-primary" onclick="showView('register')">Register new account</button>
+    <button class="btn-ghost"   onclick="showView('login')">Sign in with fingerprint</button>
+  </div>
+
+  <!-- ── REGISTER ── -->
+  <div id="view-register" class="card view">
+    <p class="card-title">Create account</p>
+    <p class="card-sub">Your device will prompt for biometric verification.</p>
+    <label class="field">
+      Username
+      <input type="text" id="reg-username" placeholder="e.g. alice" autocomplete="username" />
+    </label>
+    <div id="reg-status"></div>
+    <button class="btn-primary" onclick="handleRegister()">Register with fingerprint</button>
+    <button class="btn-ghost"   onclick="showView('home')">← Back</button>
+  </div>
+
+  <!-- ── LOGIN ── -->
+  <div id="view-login" class="card view">
+    <div class="fp-wrap">
+      <svg class="fp-pulse" width="56" height="56" viewBox="0 0 64 64" fill="none">
+        <path d="M32 6C17.64 6 6 17.64 6 32"       stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M58 32C58 17.64 46.36 6 32 6"      stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M14 32c0-9.94 8.06-18 18-18"       stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M50 32c0-9.94-8.06-18-18-18"       stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M22 32c0-5.52 4.48-10 10-10s10 4.48 10 10" stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M32 22v10"                          stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M20 40c1.5 6 6.5 12 12 14"         stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M44 40c-1.5 6-6.5 12-12 14"        stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M12 38c.8 4 2.5 8 5 11"            stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M52 38c-.8 4-2.5 8-5 11"           stroke="#6EE7B7" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+      <p class="card-title" style="margin-top:12px;">Sign in</p>
+      <p class="card-sub" style="margin-top:4px;">
+        Tap below — your device will ask for your fingerprint.
+      </p>
+    </div>
+    <div id="login-status"></div>
+    <button class="btn-primary" onclick="handleLogin()">Authenticate with fingerprint</button>
+    <button class="btn-ghost"   onclick="showView('home')">← Back</button>
+  </div>
+
+  <!-- ── SUCCESS ── -->
+  <div id="view-success" class="card view">
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:48px;">✅</div>
+      <p class="card-title" style="color:#4ade80;margin-top:12px;">Authenticated</p>
+      <p class="card-sub" style="margin-top:4px;">
+        Welcome back, <strong id="success-username" style="color:#e2e8f0;"></strong>
+      </p>
+    </div>
+    <div class="session-box">
+      <div class="comment">// Session info</div>
+      <div>user: <span class="green" id="session-user"></span></div>
+      <div>method: <span class="green">"platform-biometric"</span></div>
+      <div>verified: <span class="lime">true</span></div>
+      <div>time: <span class="yellow" id="session-time"></span></div>
+    </div>
+    <button class="btn-ghost" style="margin-top:16px;" onclick="logout()">Sign out</button>
+  </div>
+
+  <!-- ── DEBUG LOG (shared) ── -->
+  <div id="log-card" class="card log-panel" style="display:none;max-width:420px;">
+    <div class="log-label">WEBAUTHN LOG</div>
+    <div class="log-scroll" id="log-scroll"></div>
+  </div>
+
+  <p class="footer">
+    Credentials stored in sessionStorage (demo only).<br>
+    In production, send attestation/assertion to a server for cryptographic verification.
+  </p>
+
+  <script>
+    // ── Helpers ──
+    function bufferToBase64(buf) {
+      return btoa(String.fromCharCode(...new Uint8Array(buf)));
+    }
+    function base64ToBuffer(b64) {
+      const bin = atob(b64);
+      return Uint8Array.from(bin, c => c.charCodeAt(0)).buffer;
+    }
+    function randomChallenge() {
+      return crypto.getRandomValues(new Uint8Array(32));
+    }
+
+    const RP_ID   = window.location.hostname || 'localhost';
+    const RP_NAME = 'VaultAuth Demo';
+
+    // ── View switcher ──
+    function showView(name) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById('view-' + name).classList.add('active');
+      clearStatus('home-status');
+      clearStatus('reg-status');
+      clearStatus('login-status');
+    }
+
+    // ── Status badges ──
+    function setStatus(id, type, msg) {
+      const el = document.getElementById(id);
+      el.innerHTML = `<div class="status ${type}">${msg}</div>`;
+    }
+    function clearStatus(id) {
+      document.getElementById(id).innerHTML = '';
+    }
+
+    // ── Log ──
+    function log(msg, type = 'info') {
+      const card = document.getElementById('log-card');
+      const scroll = document.getElementById('log-scroll');
+      card.style.display = 'block';
+      const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+      const div = document.createElement('div');
+      div.className = `log-line log-${type}`;
+      div.innerHTML = `<span class="log-time">${time}</span>${msg}`;
+      scroll.appendChild(div);
+      scroll.scrollTop = scroll.scrollHeight;
+    }
+
+    // ── Check support ──
+    if (!window.PublicKeyCredential) {
+      document.querySelector('.card').innerHTML =
+        '<h2 style="color:#f87171;margin-bottom:12px;">Not Supported</h2>' +
+        '<p style="color:#94a3b8;font-size:14px;">WebAuthn is not available in this browser. ' +
+        'Try Chrome, Safari, or Firefox on a device with a biometric sensor over HTTPS or localhost.</p>';
+    }
+
+    // ── Register ──
+    async function handleRegister() {
+      const username = document.getElementById('reg-username').value.trim();
+      if (!username) { setStatus('reg-status', 'warn', 'Enter a username first.'); return; }
+      clearStatus('reg-status');
+      log(`Starting registration for "${username}"…`);
+
+      try {
+        const challenge = randomChallenge();
+        log('Challenge: ' + bufferToBase64(challenge).slice(0, 16) + '…');
+
+        const credential = await navigator.credentials.create({
+          publicKey: {
+            challenge,
+            rp: { name: RP_NAME, id: RP_ID },
+            user: {
+              id: Uint8Array.from(username, c => c.charCodeAt(0)),
+              name: username,
+              displayName: username,
+            },
+            pubKeyCredParams: [
+              { alg: -7,   type: 'public-key' }, // ES256
+              { alg: -257, type: 'public-key' }, // RS256
+            ],
+            authenticatorSelection: {
+              authenticatorAttachment: 'platform',
+              userVerification: 'required',
+              residentKey: 'preferred',
+            },
+            timeout: 60000,
+          },
+        });
+
+        log('Credential id: ' + credential.id.slice(0, 20) + '…', 'ok');
+        log('Type: ' + credential.type, 'ok');
+
+        sessionStorage.setItem('wa_credential', JSON.stringify({
+          id: credential.id,
+          rawId: bufferToBase64(credential.rawId),
+          username,
+        }));
+        log('Saved to sessionStorage (demo only)', 'warn');
+
+        setStatus('home-status', 'success',
+          `✓ Registered "${username}" successfully! You can now sign in with your fingerprint.`);
+        showView('home');
+      } catch (e) {
+        log('Registration failed: ' + e.message, 'err');
+        if (e.name === 'NotAllowedError') {
+          setStatus('reg-status', 'error', 'Biometric prompt was cancelled or timed out.');
+        } else if (e.name === 'InvalidStateError') {
+          setStatus('reg-status', 'error', 'This device is already registered for this username.');
+        } else {
+          setStatus('reg-status', 'error', e.message);
+        }
+      }
+    }
+
+    // ── Login ──
+    async function handleLogin() {
+      clearStatus('login-status');
+      const stored = JSON.parse(sessionStorage.getItem('wa_credential') || 'null');
+      if (!stored) {
+        setStatus('login-status', 'error', 'No registered credential found. Please register first.');
+        return;
+      }
+
+      log(`Authenticating "${stored.username}"…`);
+      try {
+        const challenge = randomChallenge();
+        log('Challenge: ' + bufferToBase64(challenge).slice(0, 16) + '…');
+
+        const assertion = await navigator.credentials.get({
+          publicKey: {
+            challenge,
+            rpId: RP_ID,
+            userVerification: 'required',
+            allowCredentials: [{ type: 'public-key', id: base64ToBuffer(stored.rawId) }],
+            timeout: 60000,
+          },
+        });
+
+        log('Assertion: ' + assertion.id.slice(0, 20) + '…', 'ok');
+        log('authenticatorData: ' + assertion.response.authenticatorData.byteLength + ' bytes', 'ok');
+        log('Signature present: ' + (assertion.response.signature.byteLength > 0), 'ok');
+        log('✓ Browser verified biometric — sending to server next in prod', 'ok');
+
+        // Show success
+        document.getElementById('success-username').textContent = stored.username;
+        document.getElementById('session-user').textContent = `"${stored.username}"`;
+        document.getElementById('session-time').textContent = `"${new Date().toISOString()}"`;
+        showView('success');
+      } catch (e) {
+        log('Authentication failed: ' + e.message, 'err');
+        if (e.name === 'NotAllowedError') {
+          setStatus('login-status', 'error', 'Biometric prompt was cancelled or timed out.');
+        } else {
+          setStatus('login-status', 'error', e.message);
+        }
+      }
+    }
+
+    // ── Logout ──
+    function logout() {
+      log('User signed out.', 'info');
+      showView('home');
+    }
+
+    // Enter key on username input
+    document.getElementById('reg-username').addEventListener('keydown', e => {
+      if (e.key === 'Enter') handleRegister();
+    });
+  </script>
+</body>
+</html>
