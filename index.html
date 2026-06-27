@@ -316,9 +316,8 @@
               { alg: -257, type: 'public-key' }, // RS256
             ],
             authenticatorSelection: {
-              authenticatorAttachment: 'platform',
-              userVerification: 'required',
-              residentKey: 'preferred',
+              userVerification: 'preferred',   // 'required' blocks devices without biometric
+              residentKey: 'discouraged',      // broader device compatibility
             },
             timeout: 60000,
           },
@@ -405,4 +404,5 @@
     });
   </script>
 </body>
-</html>
+  </html>
+  
